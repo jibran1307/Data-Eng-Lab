@@ -1,0 +1,24 @@
+"""The ten curriculum modules (order = recommended learning order)."""
+
+MODULES = [
+    {"id": "sql", "title": "Advanced SQL", "number": 1, "color": "indigo",
+     "description": "From query execution to window functions, optimisation and warehouse-style SQL patterns."},
+    {"id": "python", "title": "Python for Data Engineering", "number": 2, "color": "violet",
+     "description": "Core Python, files, APIs, OOP, pandas and building reusable ETL scripts."},
+    {"id": "fundamentals", "title": "Data Engineering Fundamentals", "number": 3, "color": "sky",
+     "description": "The vocabulary and mental models: pipelines, storage formats, lakes, warehouses, reliability."},
+    {"id": "warehousing", "title": "Data Warehousing", "number": 4, "color": "emerald",
+     "description": "Dimensional modelling, star schemas, slowly changing dimensions and loading strategies."},
+    {"id": "etl", "title": "ETL and ELT Pipelines", "number": 5, "color": "amber",
+     "description": "Extract, transform, validate, load - with retries, idempotency and monitoring."},
+    {"id": "spark", "title": "Apache Spark and PySpark", "number": 6, "color": "orange",
+     "description": "Distributed processing, DataFrames, shuffles, partitioning and performance tuning."},
+    {"id": "orchestration", "title": "Data Orchestration", "number": 7, "color": "rose",
+     "description": "Airflow DAGs, scheduling, retries, backfills and operational monitoring."},
+    {"id": "azure", "title": "Cloud Data Engineering - Azure", "number": 8, "color": "cyan",
+     "description": "ADLS Gen2, Data Factory, Databricks, Synapse/Fabric and the surrounding security stack."},
+    {"id": "streaming", "title": "Big Data and Streaming", "number": 9, "color": "fuchsia",
+     "description": "Distributed systems, Kafka, stream processing, delivery semantics and event time."},
+    {"id": "tools", "title": "Engineering Tools and Practices", "number": 10, "color": "lime",
+     "description": "Git, Linux, Docker, CI/CD, testing, observability, governance and security."},
+]

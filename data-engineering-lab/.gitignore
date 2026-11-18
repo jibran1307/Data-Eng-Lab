@@ -1,0 +1,13 @@
+node_modules/
+dist/
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.env
+.env.*
+backend/data/
+.DS_Store
+frontend/e2e/shots/
+frontend/dist-static/
+frontend/.env.local

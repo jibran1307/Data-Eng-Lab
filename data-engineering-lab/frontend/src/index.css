@@ -1,0 +1,116 @@
+@import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ---- Design tokens: light (default) and dark ---- */
+:root {
+  --bg: #f6f7f9;
+  --surface: #ffffff;
+  --surface2: #f1f3f6;
+  --line: #e4e7ec;
+  --fg: #1b1f27;
+  --muted: #667085;
+  --accent: #5b5bd6;
+  --accent-hover: #4a4ac4;
+  --accent-soft: rgba(91, 91, 214, 0.1);
+  --ok: #16875a;
+  --warn: #b7791f;
+  --bad: #d13a3a;
+  --code-bg: #f3f4f7;
+  color-scheme: light;
+}
+.dark {
+  --bg: #0f1115;
+  --surface: #16191f;
+  --surface2: #1d2129;
+  --line: #262b34;
+  --fg: #e7e9ee;
+  --muted: #8b93a1;
+  --accent: #8b8cf6;
+  --accent-hover: #a0a1fa;
+  --accent-soft: rgba(139, 140, 246, 0.14);
+  --ok: #4cc38a;
+  --warn: #e0a84a;
+  --bad: #f0706f;
+  --code-bg: #12151a;
+  color-scheme: dark;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface2: var(--surface2);
+  --color-line: var(--line);
+  --color-fg: var(--fg);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-soft: var(--accent-soft);
+  --color-ok: var(--ok);
+  --color-warn: var(--warn);
+  --color-bad: var(--bad);
+  --color-code: var(--code-bg);
+  --font-sans: "Inter", ui-sans-serif, -apple-system, "Segoe UI", system-ui, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+}
+
+html, body, #root { height: 100%; }
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+/* Subtle theme transition on surfaces only (not on every property, to keep interactions snappy) */
+body, aside, header, main, .card, .themed {
+  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+* { border-color: var(--line); }
+::selection { background: var(--accent-soft); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 6px; }
+
+/* Scrollbars */
+* { scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
+
+/* ---- Prose (lesson content) ---- */
+.prose-lab { font-size: 15px; line-height: 1.75; max-width: 74ch; }
+.prose-lab h2 { font-size: 1.35rem; font-weight: 650; margin: 2.2rem 0 .7rem; letter-spacing: -0.01em; scroll-margin-top: 80px; }
+.prose-lab h3 { font-size: 1.07rem; font-weight: 620; margin: 1.6rem 0 .5rem; scroll-margin-top: 80px; }
+.prose-lab p { margin: .75rem 0; color: var(--fg); }
+.prose-lab ul, .prose-lab ol { margin: .75rem 0; padding-left: 1.4rem; }
+.prose-lab ul { list-style: disc; } .prose-lab ol { list-style: decimal; }
+.prose-lab li { margin: .3rem 0; }
+.prose-lab a { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }
+.prose-lab strong { font-weight: 620; }
+.prose-lab blockquote { border-left: 3px solid var(--accent); background: var(--accent-soft); padding: .6rem 1rem; border-radius: 0 8px 8px 0; margin: 1rem 0; }
+.prose-lab blockquote p { margin: .3rem 0; }
+.prose-lab code:not(pre code) { font-family: var(--font-mono); font-size: .86em; background: var(--surface2); border: 1px solid var(--line); padding: .08em .35em; border-radius: 5px; }
+.prose-lab table { width: 100%; border-collapse: collapse; margin: 1rem 0; font-size: 13.5px; display: block; overflow-x: auto; }
+.prose-lab th, .prose-lab td { border: 1px solid var(--line); padding: .45rem .7rem; text-align: left; vertical-align: top; }
+.prose-lab th { background: var(--surface2); font-weight: 600; }
+.prose-lab hr { margin: 2rem 0; border-color: var(--line); }
+
+/* ---- highlight.js palette driven by CSS vars ---- */
+.hljs { color: var(--fg); }
+.hljs-keyword, .hljs-selector-tag, .hljs-built_in { color: #8b5cf6; }
+.dark .hljs-keyword, .dark .hljs-selector-tag, .dark .hljs-built_in { color: #b4a2ff; }
+.hljs-string, .hljs-attr { color: #0d8a5f; }
+.dark .hljs-string, .dark .hljs-attr { color: #7ddba8; }
+.hljs-number, .hljs-literal { color: #c2410c; }
+.dark .hljs-number, .dark .hljs-literal { color: #f0a97a; }
+.hljs-comment, .hljs-quote { color: var(--muted); font-style: italic; }
+.hljs-title, .hljs-function .hljs-title { color: #2563eb; }
+.dark .hljs-title, .dark .hljs-function .hljs-title { color: #7fb2ff; }
+.hljs-variable, .hljs-params { color: var(--fg); }
+
+/* ---- Skeleton + toast animations (subtle) ---- */
+@keyframes pulse-soft { 50% { opacity: .55; } }
+.skeleton { background: var(--surface2); border-radius: 8px; animation: pulse-soft 1.4s ease-in-out infinite; }
+@keyframes toast-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.toast-in { animation: toast-in .18s ease-out; }
+
+/* Recharts text follows theme */
+.recharts-text, .recharts-cartesian-axis-tick-value { fill: var(--muted) !important; font-size: 12px; }
+.recharts-cartesian-grid line { stroke: var(--line) !important; }
+.recharts-default-tooltip { background: var(--surface) !important; border: 1px solid var(--line) !important; border-radius: 8px !important; }
