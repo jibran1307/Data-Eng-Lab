@@ -36,7 +36,7 @@ await page.getByRole('button', { name: /switch to (light|dark) mode/i }).first()
 
 for (const [label, expect] of [['Learning Path', /Learning Path/i], ['Hands-on Projects', /Project/i], ['Exercises', /Exercise/i], ['Mock Interviews', /Interview/i], ['Scenario Practice', /Scenario/i], ['Assessments', /Assessment/i], ['Progress & Analytics', /Progress|Analytics/i], ['Settings', /Settings/i]]) {
   await page.getByRole('navigation', { name: 'Main navigation' }).getByText(label, { exact: true }).click()
-  await page.waitForTimeout(500)
+  await page.waitForTimeout(1500)
   const txt = await page.locator('main').innerText()
   ok(expect.test(txt) && !/could not|unavailable/i.test(txt), `page renders: ${label}`)
 }

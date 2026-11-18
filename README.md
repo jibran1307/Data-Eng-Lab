@@ -65,6 +65,8 @@ cd frontend && npm run typecheck && npm run lint && npm test && npm run build
 
 `./run.sh static` builds a browser-only version (SQL in DuckDB-WASM, Python in Pyodide, progress in each visitor's own browser) that deploys to GitHub Pages, Cloudflare Pages or Netlify at no cost. A GitHub Actions workflow is included. See [DEPLOY.md](DEPLOY.md).
 
+Live site: https://jibran1307.github.io/Data-Eng-Lab/ (checked with the browser test suite against this URL).
+
 ## Where your data lives
 
 | Data | Location |
