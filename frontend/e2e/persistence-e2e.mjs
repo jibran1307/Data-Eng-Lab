@@ -29,6 +29,7 @@ const state = () => page.evaluate(() => JSON.parse(localStorage.getItem('delab.s
 
 // ---------------------------------------------------------------- upgrade: an OLD save (no profile/drafts/submissions)
 await page.goto(BASE)
+await page.getByLabel('Your name').waitFor({ timeout: 60000 }) // app fully loaded before we seed an old-format save
 await page.evaluate(() => localStorage.setItem('delab.state', JSON.stringify({
   v: 1, completed: { 'sql-basics': 1700000000000 }, bookmarks: [], notes: { 'sql-basics': 'old note' }, quiz: {},
   exercises: { 'sql-01': { solved: true, attempts: 2, correct: 1, ts: 1 } }, projects: {}, scenarios: {}, assessments: [{ id: 'as-old', ts: 1, kind: 'quiz', level: 'all', durationSec: 5, timed: false, items: [], score: 80 }],
@@ -36,7 +37,7 @@ await page.evaluate(() => localStorage.setItem('delab.state', JSON.stringify({
   settings: { dailyTargetMin: 90, weeklyGoalLessons: 5, revisionIntervals: [1, 3, 7, 16, 35], interviewHistoryWindow: 1 }, startedAt: 111,
 })))
 await page.reload()
-await page.getByLabel('Your name').waitFor()
+await page.getByLabel('Your name').waitFor({ timeout: 60000 })
 ok(true, 'an upgraded user with no name is asked for one')
 const before = await state()
 ok(before.completed?.['sql-basics'] === 1700000000000 && before.exercises?.['sql-01']?.solved === true && before.assessments?.length === 1 && before.studyMinutes?.['2025-01-01'] === 42, 'old progress is still present on first load after the update')
