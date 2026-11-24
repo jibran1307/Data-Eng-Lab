@@ -2,6 +2,7 @@ import { lazy, Suspense } from 'react'
 import { Route, Routes } from 'react-router-dom'
 import Layout from './components/Layout'
 import { PageSkeleton } from './components/ui'
+import Welcome from './components/Welcome'
 import { useStore } from './lib/store'
 
 const Dashboard = lazy(() => import('./pages/Dashboard'))
@@ -21,6 +22,8 @@ export default function App() {
   const { ready } = useStore()
   if (!ready) return <div className="p-8"><PageSkeleton /></div>
   return (
+    <>
+    <Welcome />
     <Suspense fallback={<div className="p-8"><PageSkeleton /></div>}>
       <Routes>
         <Route element={<Layout />}>
@@ -41,5 +44,6 @@ export default function App() {
         </Route>
       </Routes>
     </Suspense>
+    </>
   )
 }

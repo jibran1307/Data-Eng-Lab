@@ -9,6 +9,7 @@
     "build:static": "tsc -b && vite build --mode static --outDir dist-static",
     "preview:static": "python3 e2e/serve.py dist-static",
     "e2e:static": "node e2e/static-e2e.mjs",
+    "e2e:persistence": "node e2e/persistence-e2e.mjs",
     "lint": "oxlint",
     "preview": "vite preview",
     "test": "vitest run",

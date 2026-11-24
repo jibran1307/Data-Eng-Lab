@@ -4,6 +4,7 @@ import { Button, Card, Modal, PageHeader } from '../components/ui'
 import { api, STATIC_MODE } from '../lib/api'
 import { defaultState, normalise, useStore } from '../lib/store'
 import { useTheme, useToast } from '../lib/theme'
+import { cleanName } from '../components/Welcome'
 
 interface BackupInfo { name: string; size: number; modified: number }
 
@@ -15,6 +16,7 @@ export default function Settings() {
   const [confirmReset, setConfirmReset] = useState(false)
   const [backups, setBackups] = useState<BackupInfo[]>([])
   const [ai, setAi] = useState<boolean | null>(null)
+  const [nm, setNm] = useState(state.profile.name)
   const [iv, setIv] = useState(state.settings.revisionIntervals.join(', '))
 
   const loadBackups = () => api.get<BackupInfo[]>('/api/backup').then(setBackups).catch(() => setBackups([]))
@@ -29,7 +31,8 @@ export default function Settings() {
     try {
       const parsed = JSON.parse(await f.text())
       if (parsed?.app !== 'data-engineering-lab' || typeof parsed.state !== 'object') { toast('This is not a Data Engineering Lab export file.', 'error'); return }
-      replace(normalise(parsed.state)); toast('Progress imported')
+      const imported = normalise(parsed.state)
+      replace(imported.profile.name ? imported : { ...imported, profile: state.profile }); toast('Progress imported')
     } catch { toast('Could not read that file as JSON.', 'error') }
   }
   const saveIntervals = () => {
@@ -42,6 +45,10 @@ export default function Settings() {
     <div className="max-w-3xl">
       <PageHeader title="Settings" subtitle={STATIC_MODE ? "Preferences, backup and data management. Your progress is stored only in this browser, so export a copy before clearing site data or switching devices." : "Preferences, backup and data management. Everything is stored locally in a SQLite file on this machine."} />
       <div className="space-y-4">
+        <Card className="p-5"><h2 className="mb-1 font-semibold">Profile</h2><p className="mb-3 text-sm text-muted">Your name is used in greetings. It is stored with your progress and never sent anywhere.</p>
+          <div className="flex flex-wrap items-center gap-3 text-sm"><label className="flex items-center gap-2">Name<input value={nm} maxLength={40} onChange={(e) => setNm(e.target.value)} className="w-56 rounded-lg border border-line bg-surface2 px-2 py-1" /></label>
+            <Button size="sm" disabled={!cleanName(nm) || cleanName(nm) === state.profile.name} onClick={() => { update((s) => ({ ...s, profile: { ...s.profile, name: cleanName(nm) } })); toast('Name updated') }}>Save</Button></div></Card>
+
         <Card className="p-5"><h2 className="mb-1 font-semibold">Appearance</h2><p className="mb-3 text-sm text-muted">Currently using {theme} mode. You can also use the toggle in the top bar.</p><Button onClick={toggle}>Switch to {theme === 'dark' ? 'light' : 'dark'} mode</Button></Card>
 
         <Card className="p-5"><h2 className="mb-3 font-semibold">Learning preferences</h2>
@@ -69,8 +76,8 @@ export default function Settings() {
           <Button variant="danger" onClick={() => setConfirmReset(true)}><Trash2 size={14} />Reset all progress</Button></Card>
       </div>
       <Modal open={confirmReset} onClose={() => setConfirmReset(false)} title="Reset all progress?" footer={<><Button onClick={() => setConfirmReset(false)}>Cancel</Button>
-        <Button variant="danger" onClick={async () => { replace(defaultState()); try { await api.del('/api/state') } catch { /* local reset still applied */ } localStorage.removeItem('delab.state'); setConfirmReset(false); toast('All progress reset', 'info') }}>Yes, reset everything</Button></>}>
-        This cannot be undone. Your theme preference is kept.</Modal>
+        <Button variant="danger" onClick={async () => { replace({ ...defaultState(), profile: state.profile }); try { await api.del('/api/state') } catch { /* local reset still applied */ } localStorage.removeItem('delab.state'); setConfirmReset(false); toast('All progress reset', 'info') }}>Yes, reset everything</Button></>}>
+        This cannot be undone. Your name and theme preference are kept.</Modal>
     </div>
   )
 }

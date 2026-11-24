@@ -12,6 +12,7 @@ export function defaultState(): AppState {
     customQuestions: [], activity: [], studyMinutes: {}, revisions: {},
     settings: { dailyTargetMin: 60, weeklyGoalLessons: 5, revisionIntervals: [1, 3, 7, 16, 35], interviewHistoryWindow: 1 },
     startedAt: Date.now(),
+    profile: { name: '' }, drafts: {}, submissions: {}, activeAssessment: null, activeInterview: null,
   }
 }
 
@@ -25,7 +26,7 @@ export function normalise(raw: unknown): AppState {
   const base = defaultState()
   if (!raw || typeof raw !== 'object') return base
   const r = raw as Partial<AppState>
-  return { ...base, ...r, settings: { ...base.settings, ...(r.settings ?? {}) }, v: 1 }
+  return { ...base, ...r, settings: { ...base.settings, ...(r.settings ?? {}) }, profile: { ...base.profile, ...(r.profile ?? {}) }, v: 1 }
 }
 
 interface Ctx {
@@ -112,4 +113,53 @@ export function useStudyTimer(active = true) {
     const id = window.setInterval(flush, 60000)
     return () => { window.clearInterval(id); flush() }
   }, [active, addStudy])
+}
+
+const MAX_DRAFT = 50_000
+
+/**
+ * Editor text that survives navigation and restarts. Keeps a local copy for instant typing and writes it to
+ * the persisted store shortly after you stop typing, when the key changes, and on unmount.
+ */
+export function useDraft(key: string, fallback: string): [string, (v: string) => void] {
+  const { state, update } = useStore()
+  const [cur, setCur] = useState(() => ({ key, value: state.drafts[key] ?? fallback }))
+  let value = cur.value
+  if (cur.key !== key) { value = state.drafts[key] ?? fallback; setCur({ key, value }) }
+  const pending = useRef<{ key: string; value: string } | null>(null)
+  const timer = useRef<number | undefined>(undefined)
+
+  const flush = useCallback(() => {
+    window.clearTimeout(timer.current)
+    const p = pending.current
+    if (!p) return
+    pending.current = null
+    update((s) => ({ ...s, drafts: { ...s.drafts, [p.key]: p.value.slice(0, MAX_DRAFT) } }))
+  }, [update])
+  useEffect(() => flush, [key, flush])
+
+  const set = useCallback((v: string) => {
+    setCur({ key, value: v })
+    pending.current = { key, value: v }
+    window.clearTimeout(timer.current)
+    timer.current = window.setTimeout(flush, 300)
+  }, [key, flush])
+  return [value, set]
+}
+
+/** Calls `save(value)` shortly after `value` stops changing, and once more on unmount if anything is unsaved. */
+export function useAutosave<T>(value: T, save: (v: T) => void, ms = 300) {
+  const latest = useRef(value)
+  const saved = useRef(value)
+  const saveRef = useRef(save)
+  useEffect(() => { saveRef.current = save })
+  useEffect(() => {
+    latest.current = value
+    if (Object.is(saved.current, value)) return
+    const id = window.setTimeout(() => { saved.current = value; saveRef.current(value) }, ms)
+    return () => window.clearTimeout(id)
+  }, [value, ms])
+  useEffect(() => () => {
+    if (!Object.is(saved.current, latest.current)) { saved.current = latest.current; saveRef.current(latest.current) }
+  }, [])
 }

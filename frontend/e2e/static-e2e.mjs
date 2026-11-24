@@ -22,7 +22,10 @@ page.on('response', (r) => { if (r.status() >= 400 && !/favicon/.test(r.url())) 
 
 // ---------------------------------------------------------------- shell, theme, navigation
 await page.goto(BASE)
+await page.getByLabel('Your name').fill('Test Learner'); await page.getByRole('button', { name: 'Get started' }).click()
 await page.getByRole('navigation', { name: 'Main navigation' }).waitFor()
+await page.getByText('Welcome back, Test Learner').first().waitFor({ timeout: 15000 })
+ok(true, 'first launch asks for a name and greets the user by it')
 ok(await page.evaluate(() => document.documentElement.classList.contains('dark')), 'dark theme is the default')
 const navLabels = ['Dashboard', 'Learning Path', 'SQL Playground', 'Python Playground', 'Hands-on Projects', 'Exercises', 'Mock Interviews', 'Scenario Practice', 'Assessments', 'Progress & Analytics', 'Settings']
 for (const l of navLabels) ok(await page.getByRole('navigation', { name: 'Main navigation' }).getByText(l, { exact: true }).count() === 1, `sidebar item: ${l}`)
@@ -76,7 +79,7 @@ await page.getByRole('button', { name: /^Run(\s|$)/ }).first().click(); await pa
 await typeInEditor('SELECT count(*) AS n FROM my_scratch')
 await page.getByRole('button', { name: /^Run(\s|$)/ }).first().click(); await page.waitForTimeout(1200)
 ok(await page.getByText('3', { exact: true }).first().isVisible(), 'user can create tables and insert data')
-await page.getByRole('button', { name: /reset/i }).first().click(); await page.waitForTimeout(1500)
+await page.getByRole('button', { name: /reset database/i }).first().click(); await page.waitForTimeout(1500)
 await page.getByRole('button', { name: /^Run(\s|$)/ }).first().click(); await page.waitForTimeout(1200)
 ok(/does not exist|not found|catalog error/i.test(await page.locator('main').innerText()), 'reset restores the original sample database')
 

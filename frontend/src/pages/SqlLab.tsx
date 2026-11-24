@@ -3,10 +3,11 @@ import { useSearchParams } from 'react-router-dom'
 import { CheckCircle2, Database, Eye, Lightbulb, Play, RotateCcw, Send, Table2 } from 'lucide-react'
 import CodeEditor from '../components/CodeEditor'
 import ResultTable from '../components/ResultTable'
+import SavedAnswer, { submissionEntries } from '../components/SavedAnswer'
 import { Badge, Button, Card, EmptyState, LevelBadge, PageSkeleton, Select, cx } from '../components/ui'
 import EngineBanner from '../static/EngineBanner'
 import { LOAD_HINT, STATIC_MODE, api, cached, type SqlResult, type SqlValidation } from '../lib/api'
-import { useStore, useStudyTimer } from '../lib/store'
+import { useDraft, useStore, useStudyTimer } from '../lib/store'
 import { useToast } from '../lib/theme'
 import type { SqlExercise } from '../lib/types'
 
@@ -18,7 +19,6 @@ export default function SqlLab() {
   const { state, update, log } = useStore()
   const [exs, setExs] = useState<SqlExercise[] | null>(null)
   const [schema, setSchema] = useState<Schema[]>([])
-  const [sql, setSql] = useState('SELECT * FROM customers LIMIT 10;')
   const [result, setResult] = useState<SqlResult | null>(null)
   const [verdict, setVerdict] = useState<SqlValidation | null>(null)
   const [expected, setExpected] = useState<SqlResult | null>(null)
@@ -32,6 +32,9 @@ export default function SqlLab() {
 
   const exId = sp.get('ex')
   const ex = useMemo(() => exs?.find((e) => e.id === exId) ?? null, [exs, exId])
+  // Editor text is kept per exercise (and for the free playground), so it survives leaving the page and restarts.
+  const starter = ex ? (state.submissions[ex.id]?.code ?? ex.starter ?? '-- Write your query here\n') : 'SELECT * FROM customers LIMIT 10;'
+  const [sql, setSql] = useDraft(ex ? `sql:${ex.id}` : 'sql:free', starter)
 
   const loadSchema = useCallback(() => api.get<Schema[]>('/api/sql/schema').then(setSchema).catch(() => setSchema([])), [])
   useEffect(() => {
@@ -44,7 +47,6 @@ export default function SqlLab() {
   if (seenEx !== ex?.id) {
     setSeenEx(ex?.id)
     setVerdict(null); setExpected(null); setSolution(null); setHintN(0); setResult(null)
-    if (ex) setSql(ex.starter ?? '-- Write your query here\n')
   }
 
   const run = useCallback(async () => {
@@ -62,7 +64,10 @@ export default function SqlLab() {
       setVerdict(v)
       update((s) => {
         const p = s.exercises[ex.id] ?? { solved: false, attempts: 0, correct: 0, ts: 0 }
-        return { ...s, exercises: { ...s.exercises, [ex.id]: { solved: p.solved || v.passed, attempts: p.attempts + 1, correct: p.correct + (v.passed ? 1 : 0), ts: Date.now() } } }
+        const prev = s.submissions[ex.id]
+        const now = Date.now()
+        const sub = { code: sql, ts: now, passed: v.passed, solved: v.passed ? { code: sql, ts: now } : prev?.solved }
+        return { ...s, exercises: { ...s.exercises, [ex.id]: { solved: p.solved || v.passed, attempts: p.attempts + 1, correct: p.correct + (v.passed ? 1 : 0), ts: now } }, submissions: { ...s.submissions, [ex.id]: sub } }
       })
       if (v.passed) { log('sql', `Solved SQL exercise: ${ex.title}`); toast('Correct. Exercise solved.') }
     } catch { toast('Validation failed to run', 'error') } finally { setBusy(false) }
@@ -125,10 +130,12 @@ export default function SqlLab() {
             {ex && <Button onClick={() => setHintN((n) => Math.min(n + 1, ex.hints.length))} disabled={hintN >= ex.hints.length}><Lightbulb size={14} />Hint {hintN}/{ex.hints.length}</Button>}
             {ex && <Button onClick={showExpected}><Eye size={14} />Expected output</Button>}
             {ex && <Button onClick={showSolution}>Show solution</Button>}
+            <Button variant="ghost" onClick={() => setSql(ex ? (ex.starter ?? '-- Write your query here\n') : 'SELECT * FROM customers LIMIT 10;')}>Reset code</Button>
             <Button variant="ghost" className="ml-auto" onClick={reset}><RotateCcw size={14} />Reset database</Button>
           </div>
         </div>
 
+        {ex && <SavedAnswer entries={submissionEntries(state.submissions[ex.id])} onLoad={setSql} />}
         {verdict && (
           <div className={cx('rounded-lg border p-3 text-sm', verdict.passed ? 'border-ok/40 bg-ok/10 text-ok' : 'border-bad/40 bg-bad/10 text-bad')}>
             <b>{verdict.passed ? 'Correct. ' : 'Not yet. '}</b>{verdict.error ?? verdict.feedback}

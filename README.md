@@ -83,6 +83,8 @@ Override the data directory with `DE_LAB_DATA_DIR`. Use **Settings** to export o
 - **SQL / Python Playground**: press Run, or Ctrl/Cmd+Enter in the editor. Pick an exercise for the problem, schema, hints, expected output and automated check. Solutions stay hidden until you ask.
 - **Mock Interviews**: choose type, difficulty, duration (15/30/45 min), question count and topics. Each interview draws a fresh mix of topics; recent mixes and recently asked questions are avoided. After finishing you get a rubric report. Use **Question bank** to add questions or import JSON, and **Reset interview history** to start fresh.
 - **Scenarios**: write your own answer first, then compare to the rubric and reference approach.
+- **Your work is kept**: code in the SQL and Python playgrounds (free mode and each exercise) and scenario answers are saved as you type, so you can visit other pages and come back. Code you submit is shown again under **Saved code** with a **Load into editor** button. A test or interview in progress resumes where you left it (the timer keeps running).
+- **First launch** asks for your name and uses it in greetings. Change it in **Settings**. Updating the app never resets existing progress; new fields are added alongside what you already have.
 
 ### Adding questions
 

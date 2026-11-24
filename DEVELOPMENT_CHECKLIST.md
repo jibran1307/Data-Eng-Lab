@@ -54,17 +54,26 @@ Status of every phase from the build brief. All items below were verified (see "
 - [x] GitHub Pages workflow, Cloudflare/Netlify `_headers` with a strict CSP, `DEPLOY.md`
 - [x] Real-Chrome end-to-end test (`npm run e2e:static`) and visual check of both themes and mobile
 
+## Phase 8: Saved work and personalisation
+- [x] Editor code is kept per exercise and for each free playground (SQL, Python); it survives leaving the page and restarts
+- [x] Submitted SQL/Python code is stored and shown again under "Saved code" with "Load into editor"; a later passing solution is kept even if you edit afterwards
+- [x] Scenario answers are kept as drafts and as the last submitted answer
+- [x] Assessments and mock interviews in progress resume where you left them (answers, question, running timer)
+- [x] First launch asks for a name; used in the greeting, profile menu and Settings; kept on reset
+- [x] Older saves load unchanged: new fields have defaults and nothing existing is rewritten (unit test and browser test with an old-format save)
+
 ## Verification log
 | Check | Result |
 | --- | --- |
 | `pytest` (content integrity, 36 SQL solutions, 25 Python solutions/starters, sandbox, API, persistence, static export in sync) | 92 passed |
-| `vitest` (interview engine, evaluation, assessments, spaced repetition, streak, theme persistence, static API) | 51 passed |
+| `vitest` (interview engine, evaluation, assessments, spaced repetition, streak, theme persistence, static API, drafts, saved submissions, name prompt, old-save upgrade) | 59 passed |
 | `tsc -b --noEmit` | clean |
 | `oxlint` | 0 warnings, 0 errors |
 | `npm run build` | succeeds, Monaco bundled locally (offline) |
 | Server start on 127.0.0.1:8765 serves API and SPA | verified |
 | State survives a server restart | verified |
 | Listener bound to loopback only | verified |
+| `npm run e2e:persistence` in real Chrome (name prompt, old-save upgrade, drafts, submissions, resumable tests, reset keeps name; 8 consecutive passing runs) | 24/24 passed |
 | Static build in real Chrome under a sub-path with CSP (36/36 SQL, 25/25 Python solutions, timeouts, theme, export, backup, mobile, no console errors) | all passed |
 
 ## How to extend

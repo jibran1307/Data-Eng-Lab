@@ -11,21 +11,31 @@ import type { AssessmentResult, McqItem } from '../lib/types'
 
 const fmt = (s: number) => `${Math.floor(Math.max(0, s) / 60)}:${String(Math.max(0, s) % 60).padStart(2, '0')}`
 
-function Runner({ items, cfg, onDone }: { items: McqItem[]; cfg: AssessmentConfig; onDone: (chosen: (number | null)[], sec: number) => void }) {
-  const [i, setI] = useState(0)
-  const [chosen, setChosen] = useState<(number | null)[]>(() => items.map(() => null))
-  const timed = KINDS[cfg.kind].perQuestionSec > 0
-  const [left, setLeft] = useState(items.length * KINDS[cfg.kind].perQuestionSec)
-  const t0 = useRef(0); const done = useRef(false)
+function Runner({ items, cfg, init, onProgress, onDone }: {
+  items: McqItem[]; cfg: AssessmentConfig; init: { chosen: (number | null)[]; i: number; startedAt: number }
+  onProgress: (chosen: (number | null)[], i: number) => void; onDone: (chosen: (number | null)[], sec: number) => void
+}) {
+  const [i, setI] = useState(init.i)
+  const [chosen, setChosen] = useState<(number | null)[]>(init.chosen)
+  const perQ = KINDS[cfg.kind].perQuestionSec
+  const timed = perQ > 0
+  const total = items.length * perQ
+  const remaining = () => Math.max(0, total - Math.floor((Date.now() - init.startedAt) / 1000))
+  const [left, setLeft] = useState(remaining)
+  const done = useRef(false)
   const ref = useRef(chosen)
-  useEffect(() => { ref.current = chosen }, [chosen])
-  useEffect(() => { t0.current = Date.now() }, [])
-  const finish = useCallback(() => { if (done.current) return; done.current = true; onDone(ref.current, Math.round((Date.now() - t0.current) / 1000)) }, [onDone])
+  const onDoneRef = useRef(onDone)
+  useEffect(() => { ref.current = chosen; onDoneRef.current = onDone })
+  const finish = useCallback(() => { if (done.current) return; done.current = true; onDoneRef.current(ref.current, Math.round((Date.now() - init.startedAt) / 1000)) }, [init.startedAt])
   useEffect(() => {
     if (!timed) return
-    const id = window.setInterval(() => setLeft((l) => { if (l <= 1) { window.clearInterval(id); window.setTimeout(finish, 0); return 0 } return l - 1 }), 1000)
+    const tick = () => { const l = Math.max(0, total - Math.floor((Date.now() - init.startedAt) / 1000)); setLeft(l); if (l <= 0) { window.clearInterval(id); finish() } }
+    const id = window.setInterval(tick, 1000)
+    tick()
     return () => window.clearInterval(id)
-  }, [timed, finish])
+  }, [timed, total, init.startedAt, finish])
+  const go = (ni: number) => { setI(ni); onProgress(chosen, ni) }
+  const pick = (j: number) => { const nc = chosen.map((x, k) => (k === i ? j : x)); setChosen(nc); onProgress(nc, i) }
   const q = items[i]
   return (
     <div className="mx-auto max-w-3xl space-y-4">
@@ -35,15 +45,16 @@ function Runner({ items, cfg, onDone }: { items: McqItem[]; cfg: AssessmentConfi
         <div className="mb-2 flex gap-2"><Badge tone="accent">{TOPIC_LABEL[q.topic] ?? q.topic}</Badge><Badge>{q.level}</Badge></div>
         <p className="mb-4 text-base">{q.q}</p>
         <div className="space-y-2">{q.options.map((o, j) => (
-          <button key={j} onClick={() => setChosen((c) => c.map((x, k) => (k === i ? j : x)))}
+          <button key={j} onClick={() => pick(j)}
             className={cx('flex w-full items-start gap-3 rounded-lg border px-3 py-2.5 text-left text-sm', chosen[i] === j ? 'border-accent bg-accent-soft' : 'border-line hover:bg-surface2')}>
             <span className="w-4 text-xs text-muted">{String.fromCharCode(65 + j)}</span><span>{o}</span></button>))}</div>
       </Card>
       <div className="flex items-center gap-2">
-        <Button disabled={i === 0} onClick={() => setI(i - 1)}>Previous</Button>
-        {i + 1 < items.length ? <Button variant="primary" onClick={() => setI(i + 1)}>Next</Button> : <Button variant="primary" onClick={finish}>Submit assessment</Button>}
+        <Button disabled={i === 0} onClick={() => go(i - 1)}>Previous</Button>
+        {i + 1 < items.length ? <Button variant="primary" onClick={() => go(i + 1)}>Next</Button> : <Button variant="primary" onClick={finish}>Submit assessment</Button>}
         {i + 1 < items.length && <Button variant="ghost" className="ml-auto" onClick={finish}>Submit now</Button>}
       </div>
+      <p className="text-xs text-muted">Your answers are saved as you go. If you leave this page you can pick the test up where you stopped{timed ? '; the timer keeps running' : ''}.</p>
     </div>
   )
 }
@@ -79,12 +90,18 @@ export default function Assessments() {
   const [bank, setBank] = useState<McqItem[] | null>(null)
   const [tab, setTab] = useState<'new' | 'history'>('new')
   const [cfg, setCfg] = useState<AssessmentConfig>({ kind: 'quiz', topic: 'all', level: 'all', count: 10 })
-  const [run, setRun] = useState<{ items: McqItem[]; cfg: AssessmentConfig } | null>(null)
   const [review, setReview] = useState<{ result: AssessmentResult; items: McqItem[] } | null>(null)
   const [err, setErr] = useState('')
   const [msg, setMsg] = useState('')
-  useStudyTimer(!!run)
   useEffect(() => { cached<McqItem[]>('/api/content/mcq').then(setBank).catch(() => setErr(`Could not load questions. ${LOAD_HINT}`)) }, [])
+
+  const active = state.activeAssessment
+  const run = useMemo(() => {
+    if (!active || !bank) return null
+    const items = active.ids.map((id) => bank.find((q) => q.id === id)).filter((q): q is McqItem => !!q)
+    return items.length === active.ids.length ? { items, cfg: active.cfg, active } : null
+  }, [active, bank])
+  useStudyTimer(!!run)
 
   const topics = useMemo(() => [...new Set((bank ?? []).map((q) => q.topic))], [bank])
   const start = () => {
@@ -93,21 +110,21 @@ export default function Assessments() {
     const items = pickAssessment(bank, c, state.assessmentSeen, state.lastAssessmentQs)
     if (!items.length) { setMsg('No questions match this selection. Choose another topic or level.'); return }
     setMsg('')
-    update((s) => { const seen = { ...s.assessmentSeen }; items.forEach((q) => { seen[q.id] = (seen[q.id] ?? 0) + 1 }); return { ...s, assessmentSeen: seen, lastAssessmentQs: items.map((q) => q.id) } })
-    setRun({ items, cfg: c })
+    update((s) => { const seen = { ...s.assessmentSeen }; items.forEach((q) => { seen[q.id] = (seen[q.id] ?? 0) + 1 }); return { ...s, assessmentSeen: seen, lastAssessmentQs: items.map((q) => q.id), activeAssessment: { ids: items.map((q) => q.id), cfg: c, chosen: items.map(() => null), i: 0, startedAt: Date.now() } } })
   }
   const done = useCallback((chosen: (number | null)[], sec: number) => {
     if (!run) return
     const items = scoreAssessment(run.items, chosen)
     const result: AssessmentResult = { id: `as-${Date.now()}`, ts: Date.now(), kind: run.cfg.kind, level: run.cfg.level, durationSec: sec, timed: KINDS[run.cfg.kind].perQuestionSec > 0, items, score: percent(items) }
-    update((s) => ({ ...s, assessments: [result, ...s.assessments].slice(0, 200) }))
+    update((s) => ({ ...s, assessments: [result, ...s.assessments].slice(0, 200), activeAssessment: null }))
     log('assessment', `${KINDS[run.cfg.kind].label} (${run.cfg.topic === 'all' ? 'all topics' : TOPIC_LABEL[run.cfg.topic] ?? run.cfg.topic}): ${result.score}%`)
-    setReview({ result, items: run.items }); setRun(null)
+    setReview({ result, items: run.items })
   }, [run, update, log])
 
   if (err) return <EmptyState title="Assessments unavailable" hint={err} />
   if (!bank) return <PageSkeleton />
-  if (run) return <Runner items={run.items} cfg={run.cfg} onDone={done} />
+  if (run) return <Runner key={run.active.startedAt} items={run.items} cfg={run.cfg} init={run.active}
+    onProgress={(chosen, i) => update((s) => (s.activeAssessment ? { ...s, activeAssessment: { ...s.activeAssessment, chosen, i } } : s))} onDone={done} />
   if (review) return <div className="mx-auto max-w-3xl"><PageHeader title="Assessment results" actions={<Button onClick={() => setReview(null)}>Back</Button>} /><Review {...review} /></div>
 
   const chart = [...state.assessments].reverse().map((a, i) => ({ n: i + 1, score: a.score }))

@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
 import { CheckCircle2, Lightbulb, Send, XCircle } from 'lucide-react'
 import Markdown from '../components/Markdown'
+import SavedAnswer from '../components/SavedAnswer'
 import { Badge, Button, Card, EmptyState, LevelBadge, PageHeader, PageSkeleton, ProgressBar, cx } from '../components/ui'
 import { LOAD_HINT, cached } from '../lib/api'
-import { useStore, useStudyTimer } from '../lib/store'
+import { useDraft, useStore, useStudyTimer } from '../lib/store'
 import { useToast } from '../lib/theme'
 import { evaluateAnswer } from '../lib/evaluate'
 import type { Scenario } from '../lib/types'
@@ -27,14 +28,14 @@ export default function Scenarios() {
   const toast = useToast()
   const [list, setList] = useState<Scenario[] | null>(null)
   const [sel, setSel] = useState<string>('')
-  const [answer, setAnswer] = useState('')
+  const [answer, setAnswer] = useDraft(`scn:${sel}`, state.scenarios[sel]?.last?.answer ?? '')
   const [hints, setHints] = useState(0)
   const [verdict, setVerdict] = useState<Verdict | null>(null)
   const [err, setErr] = useState('')
   useStudyTimer(true)
 
   useEffect(() => { cached<Scenario[]>('/api/content/scenarios').then((s) => { setList(s); setSel(s[0]?.id ?? '') }).catch(() => setErr(`Could not load scenarios. ${LOAD_HINT}`)) }, [])
-  const pick = (id: string) => { setSel(id); setAnswer(''); setHints(0); setVerdict(null) }
+  const pick = (id: string) => { setSel(id); setHints(0); setVerdict(null) }
 
   if (err) return <EmptyState title="Scenarios unavailable" hint={err} />
   if (!list) return <PageSkeleton />
@@ -47,7 +48,7 @@ export default function Scenarios() {
     setVerdict(v)
     update((s) => {
       const p = s.scenarios[sc.id] ?? { best: 0, attempts: [] }
-      return { ...s, scenarios: { ...s.scenarios, [sc.id]: { best: Math.max(p.best, v.score), attempts: [...p.attempts, { score: v.score, ts: Date.now() }].slice(-20) } } }
+      return { ...s, scenarios: { ...s.scenarios, [sc.id]: { best: Math.max(p.best, v.score), attempts: [...p.attempts, { score: v.score, ts: Date.now() }].slice(-20), last: { answer, score: v.score, ts: Date.now() } } } }
     })
     log('scenario', `Scenario "${sc.title}" scored ${v.score}%`)
   }
@@ -88,6 +89,8 @@ export default function Scenarios() {
             </div>
             {hints > 0 && <ol className="mt-3 list-decimal space-y-1 rounded-lg bg-surface2 p-3 pl-7 text-sm">{sc.hints.slice(0, hints).map((h, i) => <li key={i}>{h}</li>)}</ol>}
           </Card>
+
+          {state.scenarios[sc.id]?.last && <SavedAnswer noun="answer" onLoad={setAnswer} entries={[{ label: `Last submitted answer (${state.scenarios[sc.id].last!.score}%)`, code: state.scenarios[sc.id].last!.answer, ts: state.scenarios[sc.id].last!.ts, passed: state.scenarios[sc.id].last!.score >= 70 }]} />}
 
           {verdict && (
             <Card className="p-5">

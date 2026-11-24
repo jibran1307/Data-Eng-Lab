@@ -2,10 +2,11 @@ import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { CheckCircle2, Eye, FileText, Lightbulb, Play, Send, Terminal } from 'lucide-react'
 import CodeEditor from '../components/CodeEditor'
+import SavedAnswer, { submissionEntries } from '../components/SavedAnswer'
 import { Badge, Button, Card, EmptyState, LevelBadge, PageSkeleton, Select, cx } from '../components/ui'
 import EngineBanner from '../static/EngineBanner'
 import { LOAD_HINT, STATIC_MODE, api, cached, type PyResult } from '../lib/api'
-import { useStore, useStudyTimer } from '../lib/store'
+import { useDraft, useStore, useStudyTimer } from '../lib/store'
 import { useToast } from '../lib/theme'
 import type { PyExercise } from '../lib/types'
 
@@ -16,7 +17,6 @@ export default function PythonLab() {
   const toast = useToast()
   const { state, update, log } = useStore()
   const [exs, setExs] = useState<PyExercise[] | null>(null)
-  const [code, setCode] = useState(FREE)
   const [out, setOut] = useState<PyResult | null>(null)
   const [verdict, setVerdict] = useState<PyResult | null>(null)
   const [solution, setSolution] = useState<{ solution: string; explain: string } | null>(null)
@@ -29,6 +29,8 @@ export default function PythonLab() {
 
   const exId = sp.get('ex')
   const ex = useMemo(() => exs?.find((e) => e.id === exId) ?? null, [exs, exId])
+  // Editor text is kept per exercise (and for the free playground), so it survives leaving the page and restarts.
+  const [code, setCode] = useDraft(ex ? `py:${ex.id}` : 'py:free', ex ? (state.submissions[ex.id]?.code ?? ex.starter) : FREE)
 
   useEffect(() => { cached<PyExercise[]>('/api/python/exercises').then(setExs).catch(() => setErr(`Could not load Python exercises. ${LOAD_HINT}`)) }, [])
   // Reset per-exercise state when the selected exercise changes (adjust-state-during-render pattern).
@@ -36,7 +38,6 @@ export default function PythonLab() {
   if (seenEx !== ex?.id) {
     setSeenEx(ex?.id)
     setVerdict(null); setSolution(null); setHintN(0); setOut(null); setShowExpected(false)
-    setCode(ex ? ex.starter : FREE)
   }
 
   const run = async () => {
@@ -51,7 +52,10 @@ export default function PythonLab() {
       setVerdict(v); setOut(r)
       update((s) => {
         const p = s.exercises[ex.id] ?? { solved: false, attempts: 0, correct: 0, ts: 0 }
-        return { ...s, exercises: { ...s.exercises, [ex.id]: { solved: p.solved || !!v.passed, attempts: p.attempts + 1, correct: p.correct + (v.passed ? 1 : 0), ts: Date.now() } } }
+        const prev = s.submissions[ex.id]
+        const now = Date.now()
+        const sub = { code, ts: now, passed: !!v.passed, solved: v.passed ? { code, ts: now } : prev?.solved }
+        return { ...s, exercises: { ...s.exercises, [ex.id]: { solved: p.solved || !!v.passed, attempts: p.attempts + 1, correct: p.correct + (v.passed ? 1 : 0), ts: now } }, submissions: { ...s.submissions, [ex.id]: sub } }
       })
       if (v.passed) { log('python', `Solved Python exercise: ${ex.title}`); toast('All checks passed. Exercise solved.') }
     } catch { toast('Validation failed to run', 'error') } finally { setBusy(false) }
@@ -105,6 +109,7 @@ export default function PythonLab() {
             <Button variant="ghost" className="ml-auto" onClick={() => setCode(ex ? ex.starter : FREE)}>Reset code</Button>
           </div>
         </div>
+        {ex && <SavedAnswer entries={submissionEntries(state.submissions[ex.id])} onLoad={setCode} />}
         {verdict && (
           <div className={cx('rounded-lg border p-3 text-sm', verdict.passed ? 'border-ok/40 bg-ok/10 text-ok' : 'border-bad/40 bg-bad/10 text-bad')}>
             <b>{verdict.passed ? 'Passed. ' : 'Not yet. '}</b>{verdict.error ?? verdict.feedback}

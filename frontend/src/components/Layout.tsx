@@ -8,6 +8,8 @@ import { useTheme } from '../lib/theme'
 import { cached } from '../lib/api'
 import type { LessonIndex } from '../lib/types'
 import { cx } from './ui'
+import { initialsOf } from './Welcome'
+import { useStore } from '../lib/store'
 
 export const NAV = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard },
@@ -104,6 +106,8 @@ export default function Layout() {
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem('delab.sidebar') === '1')
   const loc = useLocation()
   const nav = useNavigate()
+  const { state } = useStore()
+  const name = state.profile.name
   // Overlays are tied to the route they were opened on, so navigating closes them without an effect.
   const [mobileAt, setMobileAt] = useState<string | null>(null)
   const [menuAt, setMenuAt] = useState<string | null>(null)
@@ -158,10 +162,10 @@ export default function Layout() {
           <ThemeToggle />
           <div className="relative">
             <button onClick={() => setMenu((m) => !m)} aria-label="Profile menu" aria-expanded={menu}
-              className="flex h-8 w-8 items-center justify-center rounded-full bg-accent-soft text-xs font-semibold text-accent">DE</button>
+              title={name || undefined} className="flex h-8 w-8 items-center justify-center rounded-full bg-accent-soft text-xs font-semibold text-accent">{initialsOf(name)}</button>
             {menu && (
               <div className="absolute right-0 top-10 z-50 w-48 overflow-hidden rounded-lg border border-line bg-surface py-1 shadow-lg">
-                <div className="border-b border-line px-3 py-2 text-xs text-muted">Local learner profile</div>
+                <div className="border-b border-line px-3 py-2"><div className="truncate text-sm font-medium">{name || 'Learner'}</div><div className="text-xs text-muted">Local learner profile</div></div>
                 <button className="block w-full px-3 py-2 text-left text-sm hover:bg-surface2" onClick={() => nav('/settings')}>Settings</button>
                 <button className="block w-full px-3 py-2 text-left text-sm hover:bg-surface2" onClick={() => nav('/progress')}>My progress</button>
               </div>

@@ -52,7 +52,7 @@ export default function Dashboard() {
 
   return (
     <div>
-      <PageHeader title="Welcome back" subtitle={STATIC_MODE ? "Your personal data engineering lab. Progress is saved in this browser only; use Settings to export a copy." : "Your personal data engineering lab. Everything you do here is saved locally on this machine."} />
+      <PageHeader title={state.profile.name ? `Welcome back, ${state.profile.name}` : 'Welcome back'} subtitle={STATIC_MODE ? "Your personal data engineering lab. Progress is saved in this browser only; use Settings to export a copy." : "Your personal data engineering lab. Everything you do here is saved locally on this machine."} />
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <Card className="p-4 sm:col-span-2 xl:col-span-1">

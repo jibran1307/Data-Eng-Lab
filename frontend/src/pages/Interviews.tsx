@@ -5,7 +5,7 @@ import CodeEditor from '../components/CodeEditor'
 import Markdown from '../components/Markdown'
 import { Badge, Button, Card, EmptyState, LevelBadge, Modal, PageHeader, PageSkeleton, ProgressBar, Select, Tabs, cx } from '../components/ui'
 import { LOAD_HINT, cached } from '../lib/api'
-import { useStore, useStudyTimer } from '../lib/store'
+import { useAutosave, useStore, useStudyTimer } from '../lib/store'
 import { useToast } from '../lib/theme'
 import { evaluateAnswer, gradeLabel } from '../lib/evaluate'
 import { TOPIC_LABEL } from '../lib/engine'
@@ -14,9 +14,9 @@ import {
   type Difficulty, type InterviewConfig,
 } from '../lib/interview'
 import { TEMPLATES } from '../lib/templates'
-import type { BankQuestion, InterviewResult } from '../lib/types'
+import type { ActiveInterview, BankQuestion, InterviewResult } from '../lib/types'
 
-type Phase = 'setup' | 'run' | 'report'
+type Phase = 'setup' | 'report'
 type Answer = { text: string; skipped: boolean }
 const fmt = (s: number) => `${Math.floor(Math.max(0, s) / 60)}:${String(Math.max(0, s) % 60).padStart(2, '0')}`
 
@@ -62,29 +62,38 @@ function Setup({ bank, onStart }: { bank: BankQuestion[]; onStart: (cfg: Intervi
   )
 }
 
-function Session({ questions, cfg, onFinish }: { questions: BankQuestion[]; cfg: InterviewConfig; onFinish: (a: Record<string, Answer>, usedSec: number) => void }) {
-  const [i, setI] = useState(0)
-  const [answers, setAnswers] = useState<Record<string, Answer>>({})
-  const [hints, setHints] = useState(0)
-  const [left, setLeft] = useState(cfg.durationMin * 60)
-  const start = useRef(0)
-  useEffect(() => { start.current = Date.now() }, [])
+function Session({ active, onFinish }: { active: ActiveInterview; onFinish: (a: Record<string, Answer>, usedSec: number) => void }) {
+  const { update } = useStore()
+  const { qs: questions, cfg, startedAt } = active
+  const [i, setI] = useState(active.i)
+  const [answers, setAnswers] = useState<Record<string, Answer>>(active.answers)
+  const [hints, setHints] = useState(active.hints)
+  const total = cfg.durationMin * 60
+  const [left, setLeft] = useState(() => Math.max(0, total - Math.floor((Date.now() - startedAt) / 1000)))
   const finished = useRef(false)
   const q = questions[i]
   const cur = answers[q.id]?.text ?? ''
   const coding = q.type === 'sql' || q.type === 'python'
 
+  // Everything below is persisted, so leaving the page mid-interview loses nothing.
+  const patch = (p: Partial<ActiveInterview>) => update((s) => (s.activeInterview ? { ...s, activeInterview: { ...s.activeInterview, ...p } } : s))
+  useAutosave(answers, (v) => patch({ answers: v }))
+  useAutosave(i, (v) => patch({ i: v }))
+  useAutosave(hints, (v) => patch({ hints: v }))
+
   const finish = useCallback((a: Record<string, Answer>) => {
     if (finished.current) return
     finished.current = true
-    onFinish(a, Math.round((Date.now() - start.current) / 1000))
-  }, [onFinish])
+    onFinish(a, Math.round((Date.now() - startedAt) / 1000))
+  }, [onFinish, startedAt])
   const ansRef = useRef(answers)
-  useEffect(() => { ansRef.current = answers }, [answers])
+  useEffect(() => { ansRef.current = answers })
   useEffect(() => {
-    const id = window.setInterval(() => setLeft((l) => { if (l <= 1) { window.clearInterval(id); window.setTimeout(() => finish(ansRef.current), 0); return 0 } return l - 1 }), 1000)
+    const tick = () => { const l = Math.max(0, total - Math.floor((Date.now() - startedAt) / 1000)); setLeft(l); if (l <= 0) { window.clearInterval(id); finish(ansRef.current) } }
+    const id = window.setInterval(tick, 1000)
+    tick()
     return () => window.clearInterval(id)
-  }, [finish])
+  }, [finish, total, startedAt])
 
   const go = (skip: boolean) => {
     const next = { ...answers, [q.id]: { text: skip ? '' : cur, skipped: skip } }
@@ -112,6 +121,7 @@ function Session({ questions, cfg, onFinish }: { questions: BankQuestion[]; cfg:
         {q.hints && q.hints.length > 0 && <Button onClick={() => setHints((h) => Math.min(h + 1, q.hints!.length))} disabled={hints >= q.hints.length}><Lightbulb size={14} />Hint</Button>}
         <Button variant="ghost" className="ml-auto" onClick={() => finish({ ...answers, [q.id]: { text: cur, skipped: false } })}>End now</Button>
       </div>
+      <p className="text-xs text-muted">Your answers are saved as you type. If you leave this page the interview stays open and the timer keeps running.</p>
     </div>
   )
 }
@@ -208,12 +218,12 @@ export default function Interviews() {
   const toast = useToast()
   const [bank, setBank] = useState<BankQuestion[] | null>(null)
   const [phase, setPhase] = useState<Phase>('setup')
-  const [session, setSession] = useState<{ qs: BankQuestion[]; cfg: InterviewConfig } | null>(null)
   const [report, setReport] = useState<InterviewResult | null>(null)
   const [tab, setTab] = useState<'new' | 'history' | 'bank'>('new')
   const [confirm, setConfirm] = useState(false)
   const [err, setErr] = useState('')
-  useStudyTimer(phase === 'run')
+  const session = state.activeInterview
+  useStudyTimer(!!session && phase !== 'report')
 
   useEffect(() => { cached<BankQuestion[]>('/api/content/questions').then(setBank).catch(() => setErr(`Could not load the question bank. ${LOAD_HINT}`)) }, [])
   const fullBank = useMemo(() => (bank ? [...bank, ...state.customQuestions] : []), [bank, state.customQuestions])
@@ -224,9 +234,9 @@ export default function Interviews() {
     update((s) => {
       const asked = { ...s.askedQs }
       res.questions.forEach((q) => { asked[q.id] = Date.now() })
-      return { ...s, askedQs: asked, mixSignatures: [res.signature, ...s.mixSignatures].slice(0, 50) }
+      return { ...s, askedQs: asked, mixSignatures: [res.signature, ...s.mixSignatures].slice(0, 50), activeInterview: { qs: res.questions, cfg, answers: {}, i: 0, hints: 0, startedAt: Date.now() } }
     })
-    setSession({ qs: res.questions, cfg }); setPhase('run')
+    setPhase('setup')
   }
 
   const finish = useCallback((answers: Record<string, Answer>, usedSec: number) => {
@@ -239,7 +249,7 @@ export default function Interviews() {
     const { overall, dims } = buildReport(per)
     const mix: Record<string, number> = {}; session.qs.forEach((q) => { mix[q.topic] = (mix[q.topic] ?? 0) + 1 })
     const r: InterviewResult = { id: `iv-${Date.now()}`, ts: Date.now(), type: session.cfg.type, level: session.cfg.difficulty, durationMin: session.cfg.durationMin, usedSec, perQuestion: per, overall, dims, mix }
-    update((s) => ({ ...s, interviews: [r, ...s.interviews].slice(0, 100) }))
+    update((s) => ({ ...s, interviews: [r, ...s.interviews].slice(0, 100), activeInterview: null }))
     log('interview', `Mock interview (${INTERVIEW_TYPES.find((t) => t.id === session.cfg.type)?.label}) scored ${overall}/100`)
     setReport(r); setPhase('report')
   }, [session, update, log])
@@ -247,8 +257,9 @@ export default function Interviews() {
   if (err) return <EmptyState title="Mock interviews unavailable" hint={err} />
   if (!bank) return <PageSkeleton />
 
-  if (phase === 'run' && session) return <Session questions={session.qs} cfg={session.cfg} onFinish={finish} />
   if (phase === 'report' && report) return <div className="mx-auto max-w-3xl"><PageHeader title="Interview report" subtitle={`${INTERVIEW_TYPES.find((t) => t.id === report.type)?.label} - ${report.level}`} /><Report r={report} onAgain={() => { setPhase('setup'); setTab('new') }} /></div>
+
+  if (session) return <Session key={session.startedAt} active={session} onFinish={finish} />
 
   return (
     <div>

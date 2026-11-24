@@ -1,3 +1,6 @@
+import type { AssessmentConfig } from './assessment'
+import type { InterviewConfig } from './interview'
+
 export type Level = 'beginner' | 'intermediate' | 'advanced'
 
 export interface ModuleMeta { id: string; title: string; number: number; color: string; description: string }
@@ -70,7 +73,7 @@ export interface AppState {
   quiz: Record<string, { score: number; total: number; ts: number }>
   exercises: Record<string, { solved: boolean; attempts: number; correct: number; ts: number }>
   projects: Record<string, Record<string, boolean>>
-  scenarios: Record<string, { best: number; attempts: { score: number; ts: number }[] }>
+  scenarios: Record<string, { best: number; attempts: { score: number; ts: number }[]; last?: { answer: string; score: number; ts: number } }>
   assessments: AssessmentResult[]
   assessmentSeen: Record<string, number>
   lastAssessmentQs: string[]
@@ -83,4 +86,18 @@ export interface AppState {
   revisions: Record<string, { stage: number; due: number; last: number }>
   settings: Settings
   startedAt: number
+  profile: { name: string }
+  /** Unsubmitted editor/textarea text, keyed like `sql:free`, `sql:<exerciseId>`, `py:<exerciseId>`, `scn:<scenarioId>`. */
+  drafts: Record<string, string>
+  /** Last submission per exercise; `solved` is the most recent passing submission. */
+  submissions: Record<string, Submission>
+  activeAssessment: ActiveAssessment | null
+  activeInterview: ActiveInterview | null
+}
+
+export interface Submission { code: string; ts: number; passed: boolean; solved?: { code: string; ts: number } }
+export interface ActiveAssessment { ids: string[]; cfg: AssessmentConfig; chosen: (number | null)[]; i: number; startedAt: number }
+export interface InterviewAnswer { text: string; skipped: boolean }
+export interface ActiveInterview {
+  qs: BankQuestion[]; cfg: InterviewConfig; answers: Record<string, InterviewAnswer>; i: number; hints: number; startedAt: number
 }
