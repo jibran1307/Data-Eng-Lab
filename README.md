@@ -67,6 +67,18 @@ cd frontend && npm run typecheck && npm run lint && npm test && npm run build
 
 Live site: https://jibran1307.github.io/Data-Eng-Lab/ (checked with the browser test suite against this URL).
 
+## Cloud sync and Google sign-in (optional)
+
+When `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY` are set at build time, the app requires Google sign-in and stores all progress in Supabase PostgreSQL, so the same account sees the same data on every browser and device. Without them the app behaves as described below (local SQLite or browser storage). Setup, schema and RLS: [supabase/README.md](supabase/README.md). All endpoints and tables: [API.md](API.md).
+
+```bash
+cd frontend
+cp env.example .env.local   # fill in the two values; .env.local is git-ignored
+npm run dev                 # http://localhost:5173/  (needs the backend only for local SQL/Python labs)
+```
+
+For GitHub Pages, add the same two values as repository **Variables** (Settings > Secrets and variables > Actions).
+
 ## Where your data lives
 
 | Data | Location |

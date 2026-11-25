@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import {
-  Activity, BarChart3, BookOpen, Briefcase, ChevronLeft, ChevronRight, ClipboardCheck, Code2, Database,
-  FlaskConical, LayoutDashboard, Menu, MessagesSquare, Moon, Search, Settings as SettingsIcon, Sun, Terminal, X, Waypoints,
+  Activity, BarChart3, BookOpen, Briefcase, ChevronLeft, ChevronRight, ClipboardCheck, Cloud, CloudOff, Code2, Database,
+  FlaskConical, LayoutDashboard, LogOut, Menu, MessagesSquare, Moon, Search, Settings as SettingsIcon, Sun, Terminal, X, Waypoints,
 } from 'lucide-react'
-import { useTheme } from '../lib/theme'
+import { useTheme, useToast } from '../lib/theme'
+import { profileOf, useAuth } from '../lib/auth'
 import { cached } from '../lib/api'
 import type { LessonIndex } from '../lib/types'
 import { cx } from './ui'
@@ -106,8 +107,20 @@ export default function Layout() {
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem('delab.sidebar') === '1')
   const loc = useLocation()
   const nav = useNavigate()
-  const { state } = useStore()
+  const { state, saveStatus, saveNow } = useStore()
+  const { enabled: cloud, user, signOut } = useAuth()
+  const toast = useToast()
+  const [leaving, setLeaving] = useState(false)
   const name = state.profile.name
+  const google = profileOf(user)
+  const logOut = async () => {
+    setLeaving(true)
+    // Write pending changes first so nothing is lost when the session ends.
+    const saved = await saveNow()
+    if (!saved) toast('Some recent changes could not be saved. Staying signed in so you can retry.', 'error')
+    else await signOut()
+    setLeaving(false)
+  }
   // Overlays are tied to the route they were opened on, so navigating closes them without an effect.
   const [mobileAt, setMobileAt] = useState<string | null>(null)
   const [menuAt, setMenuAt] = useState<string | null>(null)
@@ -159,15 +172,23 @@ export default function Layout() {
           <button className="lg:hidden" aria-label="Open menu" onClick={() => setMobile(true)}>{mobile ? <X size={20} /> : <Menu size={20} />}</button>
           <div className="min-w-0 flex-1"><Crumbs /></div>
           <GlobalSearch />
+          {cloud && (
+            <span className="hidden items-center gap-1 text-xs text-muted sm:inline-flex" role="status" aria-live="polite"
+              title={saveStatus === 'error' ? 'Changes could not be saved yet. Retrying automatically.' : 'Progress is saved to your account'}>
+              {saveStatus === 'error' ? <CloudOff size={14} className="text-bad" /> : <Cloud size={14} />}
+              {saveStatus === 'saving' ? 'Saving...' : saveStatus === 'error' ? 'Not saved' : 'Saved'}
+            </span>
+          )}
           <ThemeToggle />
           <div className="relative">
             <button onClick={() => setMenu((m) => !m)} aria-label="Profile menu" aria-expanded={menu}
               title={name || undefined} className="flex h-8 w-8 items-center justify-center rounded-full bg-accent-soft text-xs font-semibold text-accent">{initialsOf(name)}</button>
             {menu && (
               <div className="absolute right-0 top-10 z-50 w-48 overflow-hidden rounded-lg border border-line bg-surface py-1 shadow-lg">
-                <div className="border-b border-line px-3 py-2"><div className="truncate text-sm font-medium">{name || 'Learner'}</div><div className="text-xs text-muted">Local learner profile</div></div>
+                <div className="border-b border-line px-3 py-2"><div className="truncate text-sm font-medium">{name || google.name || 'Learner'}</div><div className="truncate text-xs text-muted">{cloud ? google.email : 'Local learner profile'}</div></div>
                 <button className="block w-full px-3 py-2 text-left text-sm hover:bg-surface2" onClick={() => nav('/settings')}>Settings</button>
                 <button className="block w-full px-3 py-2 text-left text-sm hover:bg-surface2" onClick={() => nav('/progress')}>My progress</button>
+                {cloud && <button className="flex w-full items-center gap-2 border-t border-line px-3 py-2 text-left text-sm hover:bg-surface2 disabled:opacity-50" disabled={leaving} onClick={() => void logOut()}><LogOut size={14} />{leaving ? 'Signing out...' : 'Sign out'}</button>}
               </div>
             )}
           </div>

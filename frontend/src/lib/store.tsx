@@ -1,5 +1,9 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { api } from './api'
+import { useAuth, profileOf } from './auth'
+import { emptyTables, loadRows, pushDiff, stateToTables, tablesToState, type Tables } from './cloudSync'
+import { supabase } from './supabase'
+import { useTheme, useToast } from './theme'
 import type { AppState } from './types'
 
 export const LS_KEY = 'delab.state'
@@ -29,23 +33,60 @@ export function normalise(raw: unknown): AppState {
   return { ...base, ...r, settings: { ...base.settings, ...(r.settings ?? {}) }, profile: { ...base.profile, ...(r.profile ?? {}) }, v: 1 }
 }
 
+export type SaveStatus = 'idle' | 'saving' | 'saved' | 'error'
+
 interface Ctx {
   state: AppState
   ready: boolean
+  /** Set when the signed-in user's data could not be loaded. Nothing is saved until a reload succeeds. */
+  loadError: boolean
+  saveStatus: SaveStatus
   update: (fn: (s: AppState) => AppState) => void
   log: (type: string, label: string) => void
   addStudy: (minutes: number) => void
   replace: (s: AppState) => void
+  /** Cloud mode: write any pending changes now (used before sign-out). Resolves true when everything is saved. */
+  saveNow: () => Promise<boolean>
+  /** Cloud mode: try loading the user's data again after a failed load. */
+  retryLoad: () => void
 }
 const StoreCtx = createContext<Ctx | null>(null)
 
+const SAVE_DELAY = 600
+const RETRY_DELAY = 8000
+
 export function StoreProvider({ children }: { children: ReactNode }) {
+  const { enabled: cloud, user } = useAuth()
+  const { theme, setTheme } = useTheme()
+  const toast = useToast()
+  const uid = user?.id ?? null
   const [state, setState] = useState<AppState>(defaultState)
   const [ready, setReady] = useState(false)
+  const [loadError, setLoadError] = useState(false)
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle')
+  const [attempt, setAttempt] = useState(0)
   const dirty = useRef(false)
   const timer = useRef<number | undefined>(undefined)
+  // Cloud sync bookkeeping: what the database currently holds, and whether a push is running.
+  const snapshot = useRef<Tables>(emptyTables())
+  const loadedFor = useRef<string | null>(null)
+  const pushing = useRef<Promise<boolean> | null>(null)
+  const latest = useRef({ state, theme, user })
+  useEffect(() => { latest.current = { state, theme, user } })
+  const errorShown = useRef(false)
+  const pushRef = useRef<() => Promise<boolean>>(() => Promise.resolve(true))
 
+  // A different account (or a retry) starts from a blank, not-ready store, so one user's data is never shown to another.
+  const loadKey = cloud ? `${uid ?? ''}:${attempt}` : ''
+  const [seenKey, setSeenKey] = useState(loadKey)
+  if (seenKey !== loadKey) {
+    setSeenKey(loadKey)
+    setState(defaultState()); setReady(false); setLoadError(false); setSaveStatus('idle')
+  }
+
+  // ---- local backend / browser storage (no Supabase configured)
   useEffect(() => {
+    if (cloud) return
     let cancelled = false
     ;(async () => {
       let loaded: unknown = null
@@ -59,16 +100,102 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (!cancelled) { setState(normalise(loaded)); setReady(true) }
     })()
     return () => { cancelled = true }
-  }, [])
+  }, [cloud])
 
   useEffect(() => {
-    if (!ready || !dirty.current) return
+    if (cloud || !ready || !dirty.current) return
     try { localStorage.setItem(LS_KEY, JSON.stringify(state)) } catch { /* quota */ }
     window.clearTimeout(timer.current)
     timer.current = window.setTimeout(() => {
       api.put('/api/state/app', { value: state }).catch(() => { /* retried on next change; LS holds a copy */ })
     }, 350)
-  }, [state, ready])
+  }, [state, ready, cloud])
+
+  // ---- Supabase: load the signed-in user's records
+  useEffect(() => {
+    if (!cloud) return
+    let cancelled = false
+    window.clearTimeout(timer.current)
+    loadedFor.current = null
+    dirty.current = false
+    snapshot.current = emptyTables()
+    errorShown.current = false
+    if (!uid || !supabase) return
+    try { localStorage.removeItem(LS_KEY) } catch { /* the cloud is the only source of truth for progress */ }
+    ;(async () => {
+      try {
+        const rows = await loadRows(supabase)
+        if (cancelled) return
+        const res = tablesToState(rows, defaultState())
+        let next = res.state
+        if (res.theme) setTheme(res.theme)
+        const th = res.theme ?? latest.current.theme
+        if (res.hasProfile) {
+          snapshot.current = stateToTables(next, th, uid)
+        } else {
+          // First sign-in: start clean, greet with the Google name, and create the profile row.
+          const g = profileOf(latest.current.user).name
+          if (g) next = { ...next, profile: { ...next.profile, name: g.slice(0, 40) } }
+          dirty.current = true
+        }
+        loadedFor.current = uid
+        setState(normalise(next)); setReady(true)
+      } catch {
+        if (!cancelled) setLoadError(true)
+      }
+    })()
+    return () => { cancelled = true }
+  }, [cloud, uid, attempt, setTheme])
+
+  const push = useCallback((): Promise<boolean> => {
+    if (!supabase || !uid || loadedFor.current !== uid) return Promise.resolve(true)
+    if (pushing.current) return pushing.current.then(() => pushRef.current())
+    const { state: s, theme: th } = latest.current
+    const next = stateToTables(s, th, uid)
+    setSaveStatus('saving')
+    const run = pushDiff(supabase, uid, snapshot.current, next).then((r) => {
+      pushing.current = null
+      if (loadedFor.current !== uid) return true
+      snapshot.current = r.snapshot
+      setSaveStatus(r.ok ? 'saved' : 'error')
+      if (r.ok) errorShown.current = false
+      else {
+        if (!errorShown.current) { errorShown.current = true; toast('Could not save your latest changes. Retrying shortly.', 'error') }
+        window.clearTimeout(timer.current)
+        timer.current = window.setTimeout(() => { void pushRef.current() }, RETRY_DELAY)
+      }
+      return r.ok
+    })
+    pushing.current = run
+    return run
+  }, [uid, toast])
+  useEffect(() => { pushRef.current = push }, [push])
+
+  useEffect(() => {
+    if (!cloud || !ready || !uid) return
+    // A theme change on its own is also worth saving.
+    const savedTheme = snapshot.current.profiles.get(uid)?.theme
+    if (savedTheme !== undefined && theme !== savedTheme) dirty.current = true
+    if (!dirty.current) return
+    window.clearTimeout(timer.current)
+    timer.current = window.setTimeout(() => { void push() }, SAVE_DELAY)
+    return () => window.clearTimeout(timer.current)
+  }, [state, theme, ready, cloud, uid, push])
+
+  // Save as soon as the tab is hidden or closed so recent edits are not lost.
+  useEffect(() => {
+    if (!cloud) return
+    const flush = () => { if (document.visibilityState === 'hidden' && dirty.current) void push() }
+    document.addEventListener('visibilitychange', flush)
+    window.addEventListener('pagehide', flush)
+    return () => { document.removeEventListener('visibilitychange', flush); window.removeEventListener('pagehide', flush) }
+  }, [cloud, push])
+
+  const saveNow = useCallback(async () => {
+    window.clearTimeout(timer.current)
+    return cloud && dirty.current ? push() : true
+  }, [cloud, push])
+  const retryLoad = useCallback(() => setAttempt((a) => a + 1), [])
 
   const update = useCallback((fn: (s: AppState) => AppState) => {
     dirty.current = true
@@ -89,7 +216,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const replace = useCallback((s: AppState) => { dirty.current = true; setState(normalise(s)) }, [])
 
-  const value = useMemo(() => ({ state, ready, update, log, addStudy, replace }), [state, ready, update, log, addStudy, replace])
+  const value = useMemo(
+    () => ({ state, ready, loadError, saveStatus, update, log, addStudy, replace, saveNow, retryLoad }),
+    [state, ready, loadError, saveStatus, update, log, addStudy, replace, saveNow, retryLoad],
+  )
   return <StoreCtx.Provider value={value}>{children}</StoreCtx.Provider>
 }
 

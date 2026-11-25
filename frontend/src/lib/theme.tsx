@@ -8,8 +8,8 @@ function readTheme(): Theme {
   try { return localStorage.getItem(THEME_KEY) === 'light' ? 'light' : 'dark' } catch { return 'dark' }
 }
 
-interface ThemeCtx { theme: Theme; toggle: () => void }
-const ThemeContext = createContext<ThemeCtx>({ theme: 'dark', toggle: () => {} })
+interface ThemeCtx { theme: Theme; toggle: () => void; setTheme: (t: Theme) => void }
+const ThemeContext = createContext<ThemeCtx>({ theme: 'dark', toggle: () => {}, setTheme: () => {} })
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setTheme] = useState<Theme>(readTheme)
@@ -18,7 +18,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     try { localStorage.setItem(THEME_KEY, theme) } catch { /* ignore */ }
   }, [theme])
   const toggle = useCallback(() => setTheme((t) => (t === 'dark' ? 'light' : 'dark')), [])
-  const v = useMemo(() => ({ theme, toggle }), [theme, toggle])
+  const v = useMemo(() => ({ theme, toggle, setTheme }), [theme, toggle])
   return <ThemeContext.Provider value={v}>{children}</ThemeContext.Provider>
 }
 export const useTheme = () => useContext(ThemeContext)

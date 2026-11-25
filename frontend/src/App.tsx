@@ -3,6 +3,8 @@ import { Route, Routes } from 'react-router-dom'
 import Layout from './components/Layout'
 import { PageSkeleton } from './components/ui'
 import Welcome from './components/Welcome'
+import { LoadFailed, LoginScreen } from './components/LoginScreen'
+import { useAuth } from './lib/auth'
 import { useStore } from './lib/store'
 
 const Dashboard = lazy(() => import('./pages/Dashboard'))
@@ -19,7 +21,11 @@ const Progress = lazy(() => import('./pages/Progress'))
 const Settings = lazy(() => import('./pages/Settings'))
 
 export default function App() {
-  const { ready } = useStore()
+  const { ready, loadError } = useStore()
+  const { enabled, user, loading } = useAuth()
+  if (enabled && loading) return <div className="p-8"><PageSkeleton /></div>
+  if (enabled && !user) return <LoginScreen />
+  if (loadError) return <LoadFailed />
   if (!ready) return <div className="p-8"><PageSkeleton /></div>
   return (
     <>
